@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "brainstorm": {
+      "command": "node",
+      "args": ["/Users/aleksandr/.local/share/brainstorm-mcp/dist/src/index.js"],
+      "env": {
+        "BRAINSTORM_STORAGE": "/Users/aleksandr/.brainstorm"
+      }
+    },
+    "speckit": {
+      "command": "npx",
+      "args": ["-y", "speckit-mcp-x@latest"]
+    }
+  }
+}
