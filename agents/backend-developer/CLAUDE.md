@@ -48,3 +48,33 @@ This project uses **TheodorStorm/brainstorm-mcp** for structured agent collabora
 - `backend/tests/` — test suite.
 - `docker-compose.yml` — local dev environment.
 - `.env.example` — documented environment variables.
+
+## Spec-Kit Integration
+
+You do NOT run spec-kit commands. Wait for the Architect's broadcast
+before starting any implementation work.
+
+### On receiving Architect broadcast:
+1. Read Brainstorm resource "auth-tasks"
+2. Read Brainstorm resource "auth-spec" for full requirements
+3. Filter tasks tagged [BACKEND] or [SECURITY-CRITICAL]
+4. Identify tasks marked [PARALLEL] — these can run concurrently
+
+### Task tag conventions (set by Architect in tasks.md):
+- [BACKEND] — your responsibility
+- [SECURITY-CRITICAL] — requires extra scrutiny; post to Reviewer
+  before merging. Acceptance criteria must include:
+  * JWT signing/verification tested
+  * OAuth2 callback URL validated
+  * No secrets in source code
+  * SQL injection prevention confirmed
+- [PARALLEL] — no dependency on incomplete tasks; safe to start
+- [BLOCKED:task-id] — wait for that task to complete first
+
+### Completion protocol per task:
+1. Implement the task
+2. Self-check against acceptance criteria in tasks.md
+3. Update task status in resource "auth-tasks" (publish updated version)
+4. If [SECURITY-CRITICAL]: send direct message to "reviewer" with
+   summary of what was implemented and what was checked
+5. If phase complete: broadcast phase summary to all agents

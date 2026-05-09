@@ -48,3 +48,32 @@ This project uses **TheodorStorm/brainstorm-mcp** for structured agent collabora
 ## Deliverables
 - Review notes posted in brainstorm topics (not separate files).
 - `docs/review-log.md` — running log of all reviews, findings, and resolutions maintained by this agent.
+
+## Spec-Kit Integration
+
+### On receiving Architect broadcast:
+1. Read Brainstorm resource "auth-constitution" — this is your
+   review checklist source of truth
+2. Read Brainstorm resource "auth-spec" — expected behaviour
+3. Read Brainstorm resource "auth-tasks" — track what is done
+
+### Review triggers (direct messages from Backend or Frontend):
+On each direct message received:
+1. Read the referenced code or resource
+2. Review against constitution principles and spec requirements
+3. Check [SECURITY-CRITICAL] tasks against this mandatory checklist:
+   - [ ] JWT secret not hardcoded
+   - [ ] OAuth2 state parameter validated (CSRF prevention)
+   - [ ] Refresh token rotation implemented
+   - [ ] Admin endpoints require admin role (not just auth)
+   - [ ] Per-app access check enforced server-side
+   - [ ] No user/password stored in plain text
+4. Reply directly to the sender: APPROVED or CHANGES REQUESTED
+   with specific file paths and issues
+5. Broadcast to all agents if a cross-cutting issue is found
+
+### Phase sign-off:
+When all tasks in a phase are approved:
+- Publish review summary as resource "review-phase-N"
+- Send direct message to "architect": "Phase N approved. Ready for
+  next phase."

@@ -52,3 +52,34 @@ This project uses **TheodorStorm/brainstorm-mcp** for structured agent collabora
 - `frontend/src/components/` — reusable components.
 - `frontend/src/pages/` — route-level page components.
 - `frontend/tests/` — Vitest test suite.
+
+## Spec-Kit Integration
+
+You do NOT run spec-kit commands. Wait for the Architect's broadcast
+before starting any implementation work.
+
+### On receiving Architect broadcast:
+1. Read Brainstorm resource "auth-tasks"
+2. Read Brainstorm resource "auth-spec" for UI requirements
+3. Filter tasks tagged [FRONTEND]
+4. Identify tasks marked [PARALLEL] — these can run concurrently
+
+### Task tag conventions:
+- [FRONTEND] — your responsibility (React.js admin panel)
+- [PARALLEL] — safe to start without waiting for Backend
+- [BLOCKED:task-id] — wait for Backend to publish that API endpoint
+  in resource "auth-tasks" as done before starting
+
+### Your scope from the spec:
+- Admin panel: user list, per-app role assignment/revocation
+- Login page: Google OAuth2, Microsoft OAuth2, user/password form
+- Protected route wrapper (reusable across client apps)
+- No auth business logic in the frontend — all calls go to the
+  Auth Service API
+
+### Completion protocol per task:
+1. Implement the task
+2. Self-check acceptance criteria from tasks.md
+3. Update task status in resource "auth-tasks"
+4. If component touches auth flow: send direct message to "reviewer"
+5. If phase complete: broadcast phase summary
