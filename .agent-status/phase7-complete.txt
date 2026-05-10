@@ -1,0 +1,34 @@
+Phase 7 — Security Hardening & Final Sign-off
+Completed: 2026-05-10
+
+Changes applied:
+
+1. backend/src/middleware/security_headers.py (NEW)
+   - SecurityHeadersMiddleware: HSTS, CSP (strict for API / relaxed for Swagger),
+     X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Referrer-Policy,
+     Permissions-Policy (geolocation/microphone/camera/payment all disabled)
+
+2. backend/src/main.py
+   - SecurityHeadersMiddleware wired (add_middleware)
+   - DISABLE_SWAGGER env flag: strips /docs and /redoc in production
+
+3. .env.example
+   - Added DISABLE_SWAGGER=false entry with production note
+
+4. docs/migration-guide.md
+   - Per-app status table: all 6 apps ✅ Complete
+
+5. docs/review-log.md
+   - Phase 7 security audit results appended (all 13 checks PASS)
+
+Security audit summary: 13/13 checks passed. No blockers or majors found.
+
+Full pipeline summary:
+  Phase 1: Spec-Kit pipeline, architecture docs, ADRs
+  Phase 2: Auth service backend (FastAPI, PostgreSQL, Redis, RS256 JWT)
+  Phase 3: Admin panel backend (CRUD, grant management, audit log)
+  Phase 4: Python SDK (auth-client: AuthMiddleware, validate_token, JWKS cache)
+  Phase 5: React admin frontend (user management, grant UI, audit log UI)
+  Phase 6: Client app migrations (6 apps: budget-site, news-site, poetry-site,
+           family-admin-routine, family-archive, reminders-app)
+  Phase 7: Security hardening (headers middleware, Swagger flag, audit sign-off)

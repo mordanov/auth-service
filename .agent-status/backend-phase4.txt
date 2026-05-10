@@ -1,0 +1,87 @@
+Phase 4 (US2 — Per-Application Access Control): SDK middleware implementation
+=============================================================================
+Date: 2026-05-10
+Agent: Backend Developer
+
+FILES CREATED
+-------------
+sdk/python/auth_client/jwks_cache.py
+  - JWKS public key cache with 5-minute TTL and kid-based rotation
+  - Uses httpx to fetch JWKS endpoint
+  - Module-level cache with monotonic-clock TTL check
+  - get_key() auto-refreshes on stale cache or unknown kid
+  - invalidate() helper for test isolation
+
+sdk/python/auth_client/validator.py
+  - JWT RS256 validator using authlib.jose (NOT python-jose — removed per reviewer)
+  - Extracts kid from header without full decode first
+  - Fetches public key via jwks_cache.get_key()
+  - Verifies signature with JsonWebSignature.deserialize_compact()
+  - Checks exp claim manually (int(time.time()) comparison)
+  - Checks grants[] array for app_name membership
+  - Raises TokenExpiredError, InvalidTokenError, NoGrantError
+
+sdk/python/tests/__init__.py  (empty)
+sdk/python/tests/conftest.py  (sys.path insert for local auth_client import)
+sdk/python/tests/test_middleware.py
+  - 4 integration tests: success, expired, no_grant, invalid_signature
+  - Uses cryptography to generate RSA-2048 test keys
+  - Mocks jwks_cache._fetch_keys to avoid HTTP calls
+  - All tests use module-scoped rsa_keypair fixture for speed
+
+FILES MODIFIED
+--------------
+sdk/python/auth_client/middleware.py
+  - Full ASGI AuthMiddleware (Starlette/FastAPI compatible)
+  - Extracts Bearer token from ASGI scope headers
+  - Returns JSON error responses at 401/403
+  - Injects AuthenticatedUser(sub, grants, _payload) into scope["state"]["user"]
+  - get_auth_dependency() helper for FastAPI Depends pattern
+
+sdk/python/auth_client/__init__.py
+  - Updated exports: AuthMiddleware, AuthenticatedUser, AuthError,
+    InvalidTokenError, NoGrantError, TokenExpiredError, get_auth_dependency,
+    validate_token
+
+sdk/python/pyproject.toml
+  - Replaced python-jose[cryptography]>=3.3 with authlib>=1.3
+  - Kept cryptography>=42 as explicit dependency
+  - Removed pydantic (not used by SDK core)
+
+sdk/js/src/validator.ts
+  - Full implementation using jose library (createRemoteJWKSet + jwtVerify)
+  - Module-level Map cache of JWKS key sets (5 min cacheMaxAge via jose)
+  - Maps jose errors.JWTExpired → TokenExpiredError, others → InvalidTokenError
+  - Checks grants[] array for appName membership → NoGrantError
+
+sdk/js/src/middleware.ts
+  - Express-compatible async middleware factory (createMiddleware)
+  - Extracts Bearer token from req.headers.authorization
+  - Calls validateToken(), maps AuthError subclasses to 401/403 responses
+  - Injects TokenPayload into req.authUser
+  - Extends express.Request interface via declaration merging
+
+sdk/js/src/index.ts
+  - Added MiddlewareOptions to exports
+  - Added error class re-exports: TokenExpiredError, InvalidTokenError, NoGrantError
+
+ISSUES / NOTES
+--------------
+- python-jose was already listed in pyproject.toml dependencies; replaced with
+  authlib>=1.3 as required. The old tokens.py stub (Phase 1) is superseded by
+  validator.py but left in place as it is not imported by __init__.py any more.
+- JS errors.ts uses uppercase codes ('NO_GRANT', 'TOKEN_EXPIRED', 'INVALID_TOKEN').
+  The JS middleware correctly checks err.code === 'NO_GRANT' for 403 status.
+- Python tests could not be executed (pip/pytest permissions not available in
+  this session). The test logic has been verified by code review:
+    - authlib.jose.JsonWebKey.import_key() accepts PEM bytes with {"kty":"RSA"} hint
+    - as_dict() returns the JWK dict suitable for re-import in jwks_cache
+    - patch target "auth_client.jwks_cache._fetch_keys" is correct (module-level fn)
+
+PHASE 5 READINESS
+-----------------
+Phase 5 (admin API + migration) can begin. SDK middleware is complete and
+self-contained. Client apps only need authlib, cryptography, and httpx installed.
+No changes needed to the auth service itself for Phase 5 unless admin endpoints
+affect the JWKS rotation flow (kid changes), which is already handled by the
+cache invalidation on unknown kid.

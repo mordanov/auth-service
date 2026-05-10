@@ -1,0 +1,18 @@
+Phase 5 backend (US3 — Admin Access Management): COMPLETE
+
+Tasks completed:
+- T033: backend/src/services/grant_service.py — Grant service with list_users, get_user_detail, create_grant, revoke_grant, revoke_all_user_sessions, audit helpers, and dict serialisers
+- T034: backend/src/services/audit_service.py — Audit log query service with paginated list_events supporting filters (user_id, app_name, action_type)
+- T035: backend/src/api/admin.py — Full admin router replacing the stub; endpoints: GET /admin/users, GET /admin/users/{id}, POST /admin/users/{id}/revoke-sessions, POST /admin/grants, PATCH /admin/grants/{id}, GET /admin/audit; all guarded by _get_admin_user_id() which verifies RS256 JWT and checks for "admin" in grants[]
+- backend/tests/integration/test_admin_grants.py — Tests non-admin gets 403, missing token gets 401
+- backend/tests/integration/test_admin_auth.py — Tests audit endpoint requires admin role, users listing requires auth
+
+Pre-existing files verified:
+- backend/tests/__init__.py — already present
+- backend/tests/integration/__init__.py — already present
+- backend/src/main.py already registers admin router at /admin prefix — no changes needed
+
+Notes:
+- admin.py imports audit_service and grant_service via `from backend.src.services import audit_service, grant_service`; services/__init__.py is present (empty) so this resolves at runtime
+- revoke_all_user_sessions does lazy imports of redis.asyncio and settings to avoid circular deps at module load time
+- _get_admin_user_id patches directly into token_service.decode_access_token; integration tests mock this at the module path accordingly

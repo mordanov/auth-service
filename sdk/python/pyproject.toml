@@ -1,0 +1,17 @@
+[project]
+name = "auth-client"
+version = "0.1.0"
+description = "Python SDK client for the centralised auth service"
+requires-python = ">=3.10"
+dependencies = [
+    "authlib>=1.3",
+    "cryptography>=42",
+    "httpx>=0.27",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["auth_client"]

@@ -1,0 +1,42 @@
+Backend Developer Agent — Phase 1 (Setup) — COMPLETE
+Completed: 2026-05-09
+
+Files created
+─────────────
+T001 — backend/ Python 3.12 project
+  backend/pyproject.toml          PEP 621 project table; all runtime + dev deps; ruff/black/mypy config
+  backend/src/__init__.py         empty package marker
+  backend/Dockerfile              python:3.12-slim; gcc+libpq-dev for async builds; uvicorn on :8000
+
+T003 — sdk/python/ package skeleton
+  sdk/python/pyproject.toml       package=auth-client 0.1.0; jose/httpx/pydantic deps
+  sdk/python/auth_client/__init__.py     exports AuthMiddleware, validate_token, AuthError
+  sdk/python/auth_client/exceptions.py  AuthError, TokenExpiredError, InvalidTokenError, NoGrantError
+  sdk/python/auth_client/tokens.py      validate_token stub (Phase 2 impl)
+  sdk/python/auth_client/middleware.py  AuthMiddleware stub (Phase 2 impl)
+
+T005 — docker-compose.yml (root)
+  Services: postgres:16-alpine, redis:7-alpine, auth-backend (:8000), auth-frontend (:3000)
+  Named volume: pgdata
+
+T006 — Linting config (in backend/pyproject.toml)
+  [tool.ruff]  line-length=100, target-version=py312, select E/F/I/UP
+  [tool.black] line-length=100
+  [tool.mypy]  strict=true, plugins=pydantic.mypy
+
+T008 — backend/src/config.py + supporting files
+  backend/src/config.py           pydantic-settings Settings class (all env vars)
+  .env.example                    placeholder values for every setting
+  backend/src/db/__init__.py      empty
+  backend/src/db/base.py          AsyncEngine, AsyncSessionLocal, Base, get_db()
+  backend/src/models/__init__.py  empty
+  backend/src/services/__init__.py empty
+  backend/src/api/__init__.py      empty
+  backend/src/middleware/__init__.py empty
+
+Notes
+─────
+- SDK stubs (tokens.py, middleware.py) raise NotImplementedError to keep the package importable
+  while signalling Phase 2 work clearly.
+- Dockerfile installs the [dev] extras so pytest is available in the container during CI.
+- .env.example covers all settings including POSTGRES_* vars consumed directly by docker-compose.

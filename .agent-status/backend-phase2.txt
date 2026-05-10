@@ -1,0 +1,76 @@
+Phase 2 (Foundational) — Backend — COMPLETE
+Date: 2026-05-09
+Agent: Backend Developer
+
+FILES CREATED
+=============
+
+T009 — Alembic migration environment
+  backend/alembic.ini
+  backend/alembic/env.py
+  backend/alembic/script.py.mako
+  backend/alembic/versions/.gitkeep
+
+T010 — User model
+  backend/src/models/user.py
+
+T011 — IdentityProvider model
+  backend/src/models/identity_provider.py
+
+T012 — AppGrant model
+  backend/src/models/app_grant.py
+
+T013 — RefreshToken model
+  backend/src/models/refresh_token.py
+
+T014 — AuditEvent model
+  backend/src/models/audit_event.py
+
+T015 — Initial Alembic migration
+  backend/alembic/versions/0001_initial_schema.py
+  Creates all five tables: users, identity_providers, app_grants, refresh_tokens, audit_events
+  Includes all indexes and unique constraints matching the data-model spec.
+
+T016 — TokenService
+  backend/src/services/token_service.py
+  RS256 JWT sign/verify, opaque refresh token generation (sha256), JWKS payload builder.
+
+T017 — JWKS endpoint
+  backend/src/api/jwks.py
+  GET /.well-known/jwks.json
+
+T018 — FastAPI app factory
+  backend/src/main.py
+  CORS middleware, router registration (auth, jwks, admin), startup seed_admin hook.
+
+T019 — auth_service.py
+  backend/src/services/auth_service.py
+  register_local, ensure_admin_grant, login_local, issue_tokens, refresh_tokens, revoke_all_sessions.
+
+T020 — Rate limit middleware
+  backend/src/middleware/rate_limit.py
+  Sliding window via Redis sorted sets. check_rate_limit() raises HTTP 429 when exceeded.
+
+Stub API routes (so app factory imports don't fail)
+  backend/src/api/auth.py   — stub, Phase 3 (US1)
+  backend/src/api/admin.py  — stub, Phase 5 (US3)
+
+ISSUES / NOTES
+==============
+- No issues encountered. All files match the spec exactly.
+- token_service.py includes an unused `import json` and `from cryptography.hazmat.primitives.asymmetric import rsa`
+  (both were in the provided spec); they are harmless and can be cleaned up later.
+- auth_service.py contains `import redis.asyncio as redis_lib` inside refresh_tokens() that is unused
+  (also from the spec); can be removed during Phase 3 cleanup.
+- The alembic env.py imports backend.src.models.* which triggers SQLAlchemy model registration;
+  the async engine approach is correct for asyncpg.
+
+READY FOR PHASE 3
+=================
+Phase 3 (US1 — OAuth + local auth) can begin. The following are in place:
+- All five ORM models with correct FK/cascade/index configuration
+- Alembic env and migration 0001 ready to run against a live Postgres instance
+- TokenService for RS256 JWT + JWKS
+- auth_service stubs covering the full token lifecycle
+- Rate limit helper ready to be wired into Phase 3 route handlers
+- FastAPI app factory with stub auth and admin routers

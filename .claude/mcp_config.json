@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "brainstorm": {
-      "command": "node",
-      "args": ["/Users/aleksandr/Local/brainstorm-mcp/dist/src/index.js"]
-    }
-  }
-}

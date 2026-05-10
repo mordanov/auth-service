@@ -1,0 +1,48 @@
+agent: frontend-developer
+phase: 1 (Setup)
+date: 2026-05-09
+status: COMPLETE
+
+Tasks completed:
+
+T002 — Scaffold frontend/ (TypeScript + Vite + React 18)
+  Files written:
+  - frontend/package.json          (deps: react 18, react-router-dom 6, tanstack-query 5, axios, jose, lucide-react, clsx, tailwind-merge, zustand 4.5)
+  - frontend/tsconfig.json
+  - frontend/tsconfig.node.json
+  - frontend/vite.config.ts        (port 3000, proxy /auth /admin /.well-known → localhost:8000, vitest jsdom)
+  - frontend/tailwind.config.ts    (CSS variable-based design tokens, dark mode via class)
+  - frontend/postcss.config.js
+  - frontend/index.html
+  - frontend/Dockerfile            (multi-stage: node:20-alpine builder → nginx:alpine)
+  - frontend/nginx.conf            (SPA fallback to index.html on port 3000)
+  - frontend/src/main.tsx          (ReactDOM.createRoot, QueryClientProvider, BrowserRouter)
+  - frontend/src/App.tsx           (Routes: /auth/login, /admin/users, /admin/users/:userId, /admin/audit)
+  - frontend/src/index.css         (Tailwind directives + CSS custom properties, light/dark tokens)
+  - frontend/src/test-setup.ts     (@testing-library/jest-dom import)
+  - frontend/src/pages/Login.tsx          (stub)
+  - frontend/src/pages/UserList.tsx       (stub)
+  - frontend/src/pages/UserDetail.tsx     (stub)
+  - frontend/src/pages/AuditLog.tsx       (stub)
+  - frontend/src/components/ProtectedRoute.tsx  (token + isAdmin gate via useAuthStore)
+  - frontend/src/services/auth.ts  (zustand in-memory store, JWT payload parsing for admin grant)
+  - frontend/src/services/api.ts   (axios stub, baseURL '/', withCredentials)
+
+T004 — Scaffold sdk/js/ package skeleton
+  Files written:
+  - sdk/js/package.json            (@auth-service/client 0.1.0, jose dep, tsc build)
+  - sdk/js/tsconfig.json
+  - sdk/js/src/index.ts            (re-exports validator + middleware)
+  - sdk/js/src/errors.ts           (AuthError, TokenExpiredError, InvalidTokenError, NoGrantError)
+  - sdk/js/src/validator.ts        (TokenPayload interface, stub validateToken — impl Phase 4)
+  - sdk/js/src/middleware.ts       (stub createMiddleware — impl Phase 4)
+
+T007 — Frontend linting config
+  Files written:
+  - frontend/.eslintrc.cjs         (TS + react-hooks rules, argsIgnorePattern ^_)
+  - frontend/.prettierrc           (no semi, single quote, trailing comma all, 100 cols)
+
+Notes:
+  - zustand ^4.5.0 added to frontend/package.json dependencies (required by auth store)
+  - Auth store uses in-memory token only (no localStorage), admin derived from JWT grants[] claim
+  - SDK validator/middleware stubs intentionally throw/pass-through; full implementation in Phase 4 (US2)

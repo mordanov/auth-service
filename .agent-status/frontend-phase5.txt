@@ -1,0 +1,17 @@
+frontend-phase5 completed
+
+Files modified:
+- frontend/src/pages/Login.tsx          (T039 — full login form with error handling)
+- frontend/src/services/api.ts          (T040 — axios client + interceptors + adminApi methods + types)
+- frontend/src/pages/UserList.tsx       (T036 — paginated user table with search and grant badges)
+- frontend/src/pages/UserDetail.tsx     (T037 — per-user grant toggles, session revocation, recent activity)
+- frontend/src/pages/AuditLog.tsx       (T038 — paginated audit log with app/action filters)
+- frontend/src/App.tsx                  (updated routing to nest under AdminLayout)
+
+Files created:
+- frontend/src/components/AdminLayout.tsx  (nav bar with Users / Audit Log links + Sign out)
+
+Notes:
+- AxiosRequestConfig unused import removed from api.ts (was in spec but caused TS warning)
+- adminApi.getAuditLog extended with action_type param to match AuditLog page usage
+- App.tsx route tree: ProtectedRoute wraps AdminLayout which wraps all /admin/* routes

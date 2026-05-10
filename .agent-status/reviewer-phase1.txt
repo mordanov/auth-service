@@ -1,0 +1,39 @@
+STATUS: CHANGES REQUESTED
+DATE: 2026-05-09
+REVIEWER: Reviewer Agent
+
+REVIEW DOCUMENT: docs/review-log.md
+
+SUMMARY:
+Phase 1 architecture review complete. 14 findings total across 18 documents reviewed.
+Full review log written to docs/review-log.md.
+
+BLOCKERS (2 — must fix before Phase 2 code merges):
+1. OAuth redirect delivers access_token as URL query param — exposes JWT in server logs,
+   browser history, and Referer headers. Fix: use URL fragment (#access_token=...) or
+   one-time-code exchange pattern.
+   Files: docs/architecture.md, specs/001-centralised-auth-service/contracts/auth-api.yaml
+
+2. Redis service in docker-compose has no persistent volume — container restart destroys
+   all refresh tokens and rate-limit state, invalidating all user sessions.
+   File: docker-compose.yml
+
+MAJOR (4 — fix before first Phase 2 milestone):
+3. No emergency access-token revocation path documented (admin panel should expose it).
+4. API spec does not distinguish account lockout from bad credentials in POST /auth/login.
+5. DELETE /admin/grants inconsistent with is_active soft-delete pattern in DDL.
+6. refresh_tokens Postgres table purpose (authoritative vs optional audit) is ambiguous.
+
+MINOR (4):
+7. python-jose is unmaintained; migrate JWT issuance to authlib.jose (already a dep).
+8. seed_admin_password default="" risks silent empty-password admin account creation.
+9. docker-compose depends_on does not wait for Postgres/Redis readiness; add healthchecks.
+10. Login portal vs admin panel Nginx routing not documented.
+
+SECURITY CHECKLIST: ALL 6 ITEMS PASS
+- JWT not hardcoded: PASS
+- OAuth state param: PASS
+- Refresh token rotation: PASS
+- Admin endpoints require admin role: PASS
+- Per-app access check enforced: PASS
+- No plaintext passwords: PASS

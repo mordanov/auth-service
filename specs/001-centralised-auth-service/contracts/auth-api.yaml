@@ -1,0 +1,297 @@
+openapi: 3.1.0
+info:
+  title: Auth Service — Authentication API
+  version: 1.0.0
+  description: Login, OAuth callbacks, token refresh, logout, and JWKS endpoint.
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+
+tags:
+  - name: authentication
+    description: Login, OAuth, token management
+  - name: discovery
+    description: Public key discovery
+
+paths:
+
+  /auth/login:
+    get:
+      tags: [authentication]
+      summary: Render login page (redirect target for client apps)
+      parameters:
+        - name: redirect_uri
+          in: query
+          required: false
+          schema: { type: string, format: uri }
+          description: Where to redirect after successful login
+      responses:
+        "200":
+          description: Login page HTML
+          content:
+            text/html:
+              schema: { type: string }
+
+    post:
+      tags: [authentication]
+      summary: Local username/password login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                redirect_uri:
+                  type: string
+                  format: uri
+      responses:
+        "200":
+          description: Login successful — access token returned
+          headers:
+            Set-Cookie:
+              description: "refresh=<opaque>; HttpOnly; Secure; SameSite=Strict; Path=/auth/refresh"
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "423":
+          description: Account is temporarily locked due to too many failed attempts
+          headers:
+            Retry-After:
+              schema: { type: integer }
+              description: Seconds until the lockout expires
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: account_locked
+                message: "Account locked for 5 minutes due to multiple failed login attempts"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /auth/login/{provider}:
+    get:
+      tags: [authentication]
+      summary: Initiate OAuth 2.0 authorisation code flow
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [google, microsoft]
+        - name: redirect_uri
+          in: query
+          required: false
+          schema: { type: string, format: uri }
+      responses:
+        "302":
+          description: Redirect to OAuth provider authorisation endpoint
+          headers:
+            Location:
+              schema: { type: string, format: uri }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /auth/callback/{provider}:
+    get:
+      tags: [authentication]
+      summary: OAuth 2.0 authorisation code callback
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [google, microsoft]
+        - name: code
+          in: query
+          required: true
+          schema: { type: string }
+        - name: state
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "302":
+          description: |
+            Redirect to redirect_uri. On success, the access token is delivered in the URL
+            **fragment** (e.g. `redirect_uri#access_token=JWT&token_type=Bearer&expires_in=900`).
+            The fragment is never transmitted to the server, never appears in access logs or
+            Referer headers. On error, redirects with `?error=<code>&error_description=<msg>`.
+          headers:
+            Location:
+              schema: { type: string, format: uri }
+              examples:
+                success:
+                  value: "https://app.example.com/callback#access_token=eyJ...&token_type=Bearer&expires_in=900"
+                error:
+                  value: "https://app.example.com/callback?error=access_denied&error_description=User+denied+consent"
+            Set-Cookie:
+              description: Sets HttpOnly refresh token cookie (success only)
+              schema: { type: string }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/refresh:
+    post:
+      tags: [authentication]
+      summary: Rotate refresh token and issue new access token
+      description: |
+        Reads the `refresh` HttpOnly cookie. Rotates the refresh token (old token
+        is invalidated). If the token has already been used (reuse attack),
+        all sessions for the user are revoked.
+      security:
+        - refreshCookie: []
+      responses:
+        "200":
+          description: New access token issued
+          headers:
+            Set-Cookie:
+              description: New rotated refresh token cookie
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /auth/logout:
+    post:
+      tags: [authentication]
+      summary: Revoke current refresh token and clear cookie
+      security:
+        - refreshCookie: []
+      responses:
+        "204":
+          description: Logged out successfully
+          headers:
+            Set-Cookie:
+              description: Clears the refresh cookie (Max-Age=0)
+              schema: { type: string }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /.well-known/jwks.json:
+    get:
+      tags: [discovery]
+      summary: JSON Web Key Set — public keys for JWT verification
+      description: |
+        Returns the current set of RS256 public keys used to sign access tokens.
+        Client applications cache this response (5 min TTL recommended) and
+        re-fetch when they encounter an unknown `kid` in a JWT header.
+      responses:
+        "200":
+          description: JWKS document
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [keys]
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/JWK"
+              example:
+                keys:
+                  - kty: RSA
+                    use: sig
+                    alg: RS256
+                    kid: "auth-key-1"
+                    n: "0vx7agoebGcQSuuPiLJXZptN9nndrQmkVTF..."
+                    e: "AQAB"
+
+components:
+  schemas:
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token:
+          type: string
+          description: RS256-signed JWT
+        token_type:
+          type: string
+          enum: [Bearer]
+        expires_in:
+          type: integer
+          description: Seconds until access token expires
+          example: 900
+
+    JWK:
+      type: object
+      required: [kty, use, alg, kid, n, e]
+      properties:
+        kty: { type: string, enum: [RSA] }
+        use: { type: string, enum: [sig] }
+        alg: { type: string, enum: [RS256] }
+        kid: { type: string }
+        n:   { type: string, description: RSA modulus (base64url) }
+        e:   { type: string, description: RSA exponent (base64url) }
+
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          example: invalid_credentials
+        message:
+          type: string
+          example: "Email or password is incorrect"
+
+  responses:
+    Unauthorized:
+      description: Authentication required or credentials invalid
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationError:
+      description: Request body validation failed
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: Too many requests
+      headers:
+        Retry-After:
+          schema: { type: integer }
+          description: Seconds to wait before retrying
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: refresh

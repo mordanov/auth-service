@@ -1,0 +1,49 @@
+Phase 6 Migration Status — completed 2026-05-10
+
+All 6 client apps migrated to auth-client SDK:
+
+budget-site
+  - requirements.txt: removed python-jose, passlib, bcrypt; added auth-client
+  - app/main.py: AuthMiddleware added
+  - app/core/security.py: rewritten (shim for get_current_user from request.state)
+  - app/api/v1/endpoints/auth.py: stubbed (login/register removed)
+  - app/api/v1/endpoints/users.py: User → AuthenticatedUser; /me returns sub+grants
+  - app/api/v1/endpoints/categories|operations|attachments|reports|balances|payment_methods.py:
+    User → AuthenticatedUser type annotations updated
+
+news-site
+  - requirements.txt: removed python-jose, passlib, bcrypt; added auth-client
+  - app/main.py: AuthMiddleware added
+  - app/api/auth.py: rewritten (get_current_user from request.state; require_full_access checks grants)
+  - app/api/users.py: updated to use current_user.sub
+
+poetry-site
+  - requirements.txt: removed pyjwt, bcrypt; added auth-client
+  - routers/auth.py: rewritten (per-route validate_token; public routes unaffected)
+  - routers/poems.py|comments.py|about.py: Admin → AuthenticatedUser
+
+family-admin-routine
+  - requirements.txt: removed python-jose, passlib; added auth-client
+  - app/auth.py: rewritten shim
+  - app/main.py: AuthMiddleware added
+  - app/api/auth.py: only /me remains
+
+family-archive
+  - requirements.txt: removed argon2-cffi, itsdangerous; added auth-client
+  - app/auth/dependencies.py: rewritten (current_user from request.state; require_csrf no-op)
+  - app/main.py: AuthMiddleware added; ensure_default_users removed
+  - app/api/v1/auth.py: stubbed (/me only)
+  - app/api/v1/files|folders|uploads|shares|trash.py: user.id → user.sub (TODO: data-migration)
+
+reminders-app
+  - requirements.txt: removed python-jose, passlib, bcrypt; added auth-client (already done)
+  - app/auth/security.py: rewritten shim
+  - app/main.py: AuthMiddleware added
+  - app/api/auth.py: stubbed (/me only)
+  - app/api/activities|goals|incidents|medications|tasks.py: User → AuthenticatedUser; .id → .sub
+  - app/api/categories|payments|nutrition.py: User → AuthenticatedUser type annotations
+
+Known TODOs (data-migration required):
+  - All apps: auth service sub is UUID; DB user_id columns are integer
+  - Each app needs: ALTER TABLE ADD COLUMN auth_service_user_id UUID; backfill; swap FK references
+  - reminders-app: user timezone defaulted to UTC; needs per-user setting lookup post-migration

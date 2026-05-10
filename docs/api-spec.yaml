@@ -1,0 +1,557 @@
+openapi: 3.1.0
+info:
+  title: Centralised Auth Service API
+  version: 1.0.0
+  description: |
+    Complete API specification for the centralised authentication service.
+
+    ## Authentication
+    - **Public endpoints**: `/auth/*`, `/.well-known/jwks.json` — no auth required
+    - **Admin endpoints**: `/admin/*` — require `Authorization: Bearer <JWT>` where
+      the JWT `grants` claim contains `"admin"`
+
+    ## Token flow
+    1. Login via POST `/auth/login` (local) or GET `/auth/login/{provider}` (OAuth)
+    2. Receive `access_token` (JWT, 15 min) + `refresh` cookie (opaque, 30 days)
+    3. Include `Authorization: Bearer <access_token>` on every API call
+    4. Refresh before expiry via POST `/auth/refresh` (uses cookie automatically)
+    5. Client apps validate the JWT locally using the JWKS public key
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+  - url: https://auth.example.com
+    description: Production
+
+tags:
+  - name: authentication
+    description: Login, OAuth, token management
+  - name: discovery
+    description: Public key discovery (JWKS)
+  - name: users
+    description: Admin — user listing and detail
+  - name: grants
+    description: Admin — per-application access management
+  - name: audit
+    description: Admin — immutable audit log
+
+paths:
+
+  # ── Authentication ────────────────────────────────────────────────────────
+
+  /auth/login:
+    get:
+      tags: [authentication]
+      summary: Render login page
+      description: HTML login page. Client apps redirect unauthenticated users here.
+      parameters:
+        - name: redirect_uri
+          in: query
+          required: false
+          schema: { type: string, format: uri }
+          description: URL to redirect to after successful login
+      responses:
+        "200":
+          description: Login page HTML
+          content:
+            text/html:
+              schema: { type: string }
+
+    post:
+      tags: [authentication]
+      summary: Local username/password login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: alice@example.com
+                password:
+                  type: string
+                  minLength: 8
+                redirect_uri:
+                  type: string
+                  format: uri
+      responses:
+        "200":
+          description: Login successful
+          headers:
+            Set-Cookie:
+              description: "refresh=<opaque>; HttpOnly; Secure; SameSite=Strict; Path=/auth/refresh"
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /auth/login/{provider}:
+    get:
+      tags: [authentication]
+      summary: Initiate OAuth 2.0 authorisation code + PKCE flow
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { type: string, enum: [google, microsoft] }
+        - name: redirect_uri
+          in: query
+          required: false
+          schema: { type: string, format: uri }
+      responses:
+        "302":
+          description: Redirect to identity provider
+          headers:
+            Location:
+              schema: { type: string, format: uri }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /auth/callback/{provider}:
+    get:
+      tags: [authentication]
+      summary: OAuth 2.0 callback — exchange code, issue tokens
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { type: string, enum: [google, microsoft] }
+        - name: code
+          in: query
+          required: true
+          schema: { type: string }
+        - name: state
+          in: query
+          required: true
+          schema: { type: string }
+          description: CSRF state token (validated server-side against Redis)
+      responses:
+        "302":
+          description: Redirect to redirect_uri with access_token param
+          headers:
+            Location:
+              schema: { type: string, format: uri }
+            Set-Cookie:
+              schema: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/refresh:
+    post:
+      tags: [authentication]
+      summary: Rotate refresh token, issue new access token
+      description: |
+        Reads the `refresh` HttpOnly cookie. Rotates the token on success.
+        If the presented token was already rotated (theft detection), all sessions
+        for the user are revoked immediately.
+      security:
+        - refreshCookie: []
+      responses:
+        "200":
+          description: New access token issued
+          headers:
+            Set-Cookie:
+              description: New rotated refresh token cookie
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /auth/logout:
+    post:
+      tags: [authentication]
+      summary: Revoke current refresh token and clear cookie
+      security:
+        - refreshCookie: []
+      responses:
+        "204":
+          description: Logged out
+          headers:
+            Set-Cookie:
+              description: Clears refresh cookie (Max-Age=0)
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  # ── Discovery ─────────────────────────────────────────────────────────────
+
+  /.well-known/jwks.json:
+    get:
+      tags: [discovery]
+      summary: JSON Web Key Set
+      description: |
+        RS256 public keys for access token verification.
+        Cache for 5 minutes; re-fetch when encountering an unknown `kid`.
+      responses:
+        "200":
+          description: JWKS document
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JWKSet" }
+              example:
+                keys:
+                  - kty: RSA
+                    use: sig
+                    alg: RS256
+                    kid: auth-key-1
+                    n: "0vx7agoebGcQSuuPiLJX..."
+                    e: AQAB
+
+  # ── Admin — Users ──────────────────────────────────────────────────────────
+
+  /admin/users:
+    get:
+      tags: [users]
+      summary: List all users (paginated)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+        - name: q
+          in: query
+          schema: { type: string }
+          description: Search by display name or email
+      responses:
+        "200":
+          description: Paginated user list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/UserSummary" }
+                  total: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/users/{userId}:
+    get:
+      tags: [users]
+      summary: Get user detail with grants and identity providers
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: User detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ── Admin — Grants ─────────────────────────────────────────────────────────
+
+  /admin/grants:
+    post:
+      tags: [grants]
+      summary: Grant user access to an application
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, app_name]
+              properties:
+                user_id:
+                  type: string
+                  format: uuid
+                app_name:
+                  type: string
+                  example: budget-site
+                  description: Must match the app_name used by the client app's middleware
+                role:
+                  type: string
+                  enum: [user, admin]
+                  default: user
+      responses:
+        "201":
+          description: Grant created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AppGrant" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Grant already exists
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /admin/grants/{grantId}:
+    patch:
+      tags: [grants]
+      summary: Revoke user application access (soft-delete)
+      description: Sets is_active=false. Record retained for audit. Re-grant via POST /admin/grants.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: grantId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [is_active]
+              properties:
+                is_active: { type: boolean, enum: [false] }
+      responses:
+        "200":
+          description: Grant revoked (soft-deleted)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AppGrant" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/users/{userId}/revoke-sessions:
+    post:
+      tags: [users]
+      summary: Emergency — revoke all active sessions for a user
+      description: |
+        Marks all refresh tokens revoked and purges Redis keys for the user.
+        Current access tokens remain valid until TTL (≤ 15 min).
+        Writes audit event `token_revoked_all`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: All sessions revoked
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ── Admin — Audit ──────────────────────────────────────────────────────────
+
+  /admin/audit:
+    get:
+      tags: [audit]
+      summary: List audit events (newest first, paginated)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, maximum: 200 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+        - name: user_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: app_name
+          in: query
+          schema: { type: string }
+        - name: action_type
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated audit log
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/AuditEvent" }
+                  total: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+components:
+  schemas:
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token:
+          type: string
+          description: RS256-signed JWT containing sub and grants[] claims
+        token_type:
+          type: string
+          enum: [Bearer]
+        expires_in:
+          type: integer
+          description: Seconds until access token expires
+          example: 900
+
+    JWKSet:
+      type: object
+      required: [keys]
+      properties:
+        keys:
+          type: array
+          items:
+            type: object
+            required: [kty, use, alg, kid, n, e]
+            properties:
+              kty: { type: string, enum: [RSA] }
+              use: { type: string, enum: [sig] }
+              alg: { type: string, enum: [RS256] }
+              kid: { type: string }
+              n:   { type: string }
+              e:   { type: string }
+
+    UserSummary:
+      type: object
+      required: [id, display_name, is_active, created_at, grants, identity_providers]
+      properties:
+        id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        grants:
+          type: array
+          items: { $ref: "#/components/schemas/AppGrant" }
+        identity_providers:
+          type: array
+          items: { $ref: "#/components/schemas/IdentityProviderSummary" }
+
+    UserDetail:
+      allOf:
+        - $ref: "#/components/schemas/UserSummary"
+      type: object
+      properties:
+        recent_events:
+          type: array
+          items: { $ref: "#/components/schemas/AuditEvent" }
+
+    AppGrant:
+      type: object
+      required: [id, user_id, app_name, role, granted_at, is_active]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        app_name: { type: string, example: budget-site }
+        role: { type: string, enum: [user, admin] }
+        granted_at: { type: string, format: date-time }
+        is_active: { type: boolean }
+        granted_by_display_name: { type: string, nullable: true }
+
+    IdentityProviderSummary:
+      type: object
+      required: [provider, email, created_at]
+      properties:
+        provider: { type: string, enum: [google, microsoft, local] }
+        email: { type: string, format: email }
+        created_at: { type: string, format: date-time }
+
+    AuditEvent:
+      type: object
+      required: [id, action_type, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        actor_user_id: { type: string, format: uuid, nullable: true }
+        actor_display_name: { type: string, nullable: true }
+        action_type:
+          type: string
+          enum:
+            - user_created
+            - user_deactivated
+            - grant_created
+            - grant_revoked
+            - login_success
+            - login_failed
+            - token_revoked_all
+        target_user_id: { type: string, format: uuid, nullable: true }
+        target_user_display_name: { type: string, nullable: true }
+        target_app: { type: string, nullable: true }
+        metadata: { type: object, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error: { type: string, example: invalid_credentials }
+        message: { type: string, example: "Email or password is incorrect" }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid authentication
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Authenticated but not authorised (missing admin role or app grant)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationError:
+      description: Request body validation failed
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: Too many requests
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: RS256 JWT. Admin endpoints require "admin" in grants[].
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: refresh
+      description: HttpOnly opaque refresh token cookie
