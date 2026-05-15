@@ -16,7 +16,7 @@ from typing import Any
 from authlib.jose import JsonWebKey, jwt as jose_jwt
 from authlib.jose.errors import JoseError
 
-from backend.src.config import settings
+from src.config import settings
 
 
 class JWTError(Exception):

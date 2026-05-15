@@ -8,14 +8,14 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Import all models so Alembic sees them
-from backend.src.db.base import Base  # noqa: E402
-from backend.src.models import user, identity_provider, app_grant, refresh_token, audit_event  # noqa: E402
+from src.db.base import Base  # noqa: E402
+from src.models import user, identity_provider, app_grant, refresh_token, audit_event  # noqa: E402
 
 target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    from backend.src.config import settings
+    from src.config import settings
     return settings.database_url
 
 

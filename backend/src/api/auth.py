@@ -12,12 +12,12 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.src.config import settings
-from backend.src.db.base import get_db
-from backend.src.middleware.rate_limit import check_rate_limit
-from backend.src.models.audit_event import AuditEvent
-from backend.src.services import auth_service, oauth_service
-from backend.src.services.token_service import hash_refresh_token
+from src.config import settings
+from src.db.base import get_db
+from src.middleware.rate_limit import check_rate_limit
+from src.models.audit_event import AuditEvent
+from src.services import auth_service, oauth_service
+from src.services.token_service import hash_refresh_token
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -87,11 +87,11 @@ async def _log_event(
 
 
 @router.get("/login")
-async def login_page(redirect_uri: str | None = None):
+async def login_page(redirect_after: str | None = None):
     """Redirect to frontend login portal."""
-    url = f"http://localhost:3000/auth/login"
-    if redirect_uri:
-        url += f"?redirect_uri={redirect_uri}"
+    url = f"{settings.app_base_url}/auth/login"
+    if redirect_after:
+        url += f"?redirect_after={redirect_after}"
     return RedirectResponse(url=url, status_code=302)
 
 
@@ -244,7 +244,7 @@ async def logout(
     if refresh:
         token_hash = hash_refresh_token(refresh)
         from sqlalchemy import update
-        from backend.src.models.refresh_token import RefreshToken
+        from src.models.refresh_token import RefreshToken
         await session.execute(
             update(RefreshToken)
             .where(RefreshToken.token_hash == token_hash)

@@ -7,11 +7,11 @@ from typing import Any
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.src.models.app_grant import AppGrant
-from backend.src.models.audit_event import AuditEvent
-from backend.src.models.identity_provider import IdentityProvider
-from backend.src.models.refresh_token import RefreshToken
-from backend.src.models.user import User
+from src.models.app_grant import AppGrant
+from src.models.audit_event import AuditEvent
+from src.models.identity_provider import IdentityProvider
+from src.models.refresh_token import RefreshToken
+from src.models.user import User
 
 
 # ── User listing ──────────────────────────────────────────────────────────────
@@ -175,7 +175,7 @@ async def revoke_all_user_sessions(
     """Revoke all active refresh tokens for a user (emergency action)."""
     from sqlalchemy import update
     import redis.asyncio as aioredis
-    from backend.src.config import settings
+    from src.config import settings
 
     # Mark all DB refresh tokens revoked
     await session.execute(

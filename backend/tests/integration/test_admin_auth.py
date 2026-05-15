@@ -11,7 +11,7 @@ pytestmark = pytest.mark.integration
 async def test_admin_audit_requires_admin_role():
     """GET /admin/audit returns 403 for non-admin JWT."""
     from httpx import AsyncClient, ASGITransport
-    from backend.src.main import app
+    from src.main import app
 
     with patch(
         "backend.src.services.token_service.decode_access_token",
@@ -29,7 +29,7 @@ async def test_admin_audit_requires_admin_role():
 async def test_admin_grants_list_requires_auth():
     """GET /admin/users returns 401 when no token provided."""
     from httpx import AsyncClient, ASGITransport
-    from backend.src.main import app
+    from src.main import app
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/admin/users")

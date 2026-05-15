@@ -4,22 +4,27 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from passlib.context import CryptContext
+import bcrypt as _bcrypt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.src.config import settings
-from backend.src.models.app_grant import AppGrant
-from backend.src.models.identity_provider import IdentityProvider
-from backend.src.models.refresh_token import RefreshToken
-from backend.src.models.user import User
-from backend.src.services.token_service import (
+from src.config import settings
+from src.models.app_grant import AppGrant
+from src.models.identity_provider import IdentityProvider
+from src.models.refresh_token import RefreshToken
+from src.models.user import User
+from src.services.token_service import (
     create_access_token,
     generate_refresh_token,
     hash_refresh_token,
 )
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
+def _hash_password(password: str) -> str:
+    return _bcrypt.hashpw(password.encode(), _bcrypt.gensalt(rounds=12)).decode()
+
+
+def _verify_password(password: str, password_hash: str) -> bool:
+    return _bcrypt.checkpw(password.encode(), password_hash.encode())
 
 
 # ── Registration ──────────────────────────────────────────────────────────────
@@ -53,7 +58,7 @@ async def register_local(
         user_id=user.id,
         provider="local",
         email=email,
-        password_hash=pwd_context.hash(password),
+        password_hash=_hash_password(password),
     )
     session.add(idp)
     await session.commit()
@@ -100,7 +105,7 @@ async def login_local(
     )
     if not idp or not idp.password_hash:
         raise ValueError("Invalid credentials")
-    if not pwd_context.verify(password, idp.password_hash):
+    if not _verify_password(password, idp.password_hash):
         raise ValueError("Invalid credentials")
 
     user = await session.get(User, idp.user_id)

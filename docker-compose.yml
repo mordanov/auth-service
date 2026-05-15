@@ -35,6 +35,9 @@ services:
   auth-backend:
     build: ./backend
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-authuser}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-authdb}
+      REDIS_URL: redis://redis:6379/0
     ports:
       - "8000:8000"
     depends_on:
@@ -46,7 +49,9 @@ services:
   auth-frontend:
     build: ./frontend
     ports:
-      - "3000:3000"
+      - "3000:80"
+    depends_on:
+      - auth-backend
 
 volumes:
   pgdata:

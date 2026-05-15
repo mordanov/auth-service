@@ -10,9 +10,9 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.src.db.base import get_db
-from backend.src.services import audit_service, grant_service
-from backend.src.services.token_service import decode_access_token, JWTError
+from src.db.base import get_db
+from src.services import audit_service, grant_service
+from src.services.token_service import decode_access_token, JWTError
 
 router = APIRouter(tags=["admin"])
 

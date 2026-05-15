@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.src.models.audit_event import AuditEvent
+from src.models.audit_event import AuditEvent
 
 
 async def list_events(

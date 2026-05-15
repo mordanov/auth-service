@@ -4,9 +4,9 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.src.config import settings
-from backend.src.api import auth, jwks, admin
-from backend.src.middleware.security_headers import SecurityHeadersMiddleware
+from src.config import settings
+from src.api import auth, jwks, admin
+from src.middleware.security_headers import SecurityHeadersMiddleware
 
 
 def create_app() -> FastAPI:
@@ -47,8 +47,8 @@ async def _seed_admin() -> None:
     """Create the initial admin account if SEED_ADMIN_EMAIL is configured."""
     if not settings.seed_admin_email or not settings.seed_admin_password:
         return
-    from backend.src.db.base import AsyncSessionLocal
-    from backend.src.services.auth_service import register_local, ensure_admin_grant
+    from src.db.base import AsyncSessionLocal
+    from src.services.auth_service import register_local, ensure_admin_grant
     async with AsyncSessionLocal() as session:
         await register_local(
             session,

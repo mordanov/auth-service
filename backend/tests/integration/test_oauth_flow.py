@@ -18,7 +18,7 @@ def anyio_backend():
 async def test_oauth_login_redirect():
     """GET /auth/login/google redirects to provider URL."""
     from httpx import AsyncClient, ASGITransport
-    from backend.src.main import app
+    from src.main import app
 
     with patch(
         "backend.src.services.oauth_service.get_authorization_url",
@@ -37,7 +37,7 @@ async def test_oauth_login_redirect():
 async def test_oauth_callback_creates_user():
     """OAuth callback upserts user and issues tokens."""
     from httpx import AsyncClient, ASGITransport
-    from backend.src.main import app
+    from src.main import app
 
     mock_user_info = {
         "sub": "google-sub-12345",
@@ -68,7 +68,7 @@ async def test_oauth_callback_creates_user():
 async def test_oauth_invalid_state():
     """OAuth callback with invalid state returns 401."""
     from httpx import AsyncClient, ASGITransport
-    from backend.src.main import app
+    from src.main import app
 
     with patch(
         "backend.src.services.oauth_service.exchange_code",

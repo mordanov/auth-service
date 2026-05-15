@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from backend.src.services.token_service import get_jwks_payload
+from src.services.token_service import get_jwks_payload
 
 router = APIRouter(tags=["discovery"])
 

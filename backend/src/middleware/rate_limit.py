@@ -7,7 +7,7 @@ from typing import Callable
 import redis.asyncio as aioredis
 from fastapi import HTTPException, Request, status
 
-from backend.src.config import settings
+from src.config import settings
 
 _redis_client: aioredis.Redis | None = None
 

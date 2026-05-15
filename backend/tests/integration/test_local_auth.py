@@ -13,7 +13,7 @@ pytestmark = pytest.mark.integration
 @pytest.fixture
 def app():
     """Return the FastAPI app instance."""
-    from backend.src.main import app as _app
+    from src.main import app as _app
     return _app
 
 
@@ -26,11 +26,11 @@ def anyio_backend():
 async def test_local_login_success(app):
     """Successful login returns a valid JWT and sets refresh cookie."""
     from jose import jwt as _jwt
-    from backend.src.config import settings
+    from src.config import settings
 
     # First register a test user
-    from backend.src.db.base import AsyncSessionLocal
-    from backend.src.services.auth_service import register_local, ensure_admin_grant
+    from src.db.base import AsyncSessionLocal
+    from src.services.auth_service import register_local, ensure_admin_grant
 
     async with AsyncSessionLocal() as session:
         await register_local(
@@ -81,8 +81,8 @@ async def test_local_login_wrong_password(app):
 @pytest.mark.anyio
 async def test_token_refresh_and_rotation(app):
     """Refresh endpoint rotates the refresh token."""
-    from backend.src.db.base import AsyncSessionLocal
-    from backend.src.services.auth_service import register_local
+    from src.db.base import AsyncSessionLocal
+    from src.services.auth_service import register_local
 
     async with AsyncSessionLocal() as session:
         await register_local(
