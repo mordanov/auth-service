@@ -21,7 +21,7 @@ async def test_oauth_login_redirect():
     from src.main import app
 
     with patch(
-        "backend.src.services.oauth_service.get_authorization_url",
+        "src.services.oauth_service.get_authorization_url",
         new=AsyncMock(return_value="https://accounts.google.com/o/oauth2/auth?state=abc&..."),
     ):
         async with AsyncClient(
@@ -47,7 +47,7 @@ async def test_oauth_callback_creates_user():
     }
 
     with patch(
-        "backend.src.services.oauth_service.exchange_code",
+        "src.services.oauth_service.exchange_code",
         new=AsyncMock(return_value=mock_user_info),
     ):
         async with AsyncClient(
@@ -71,7 +71,7 @@ async def test_oauth_invalid_state():
     from src.main import app
 
     with patch(
-        "backend.src.services.oauth_service.exchange_code",
+        "src.services.oauth_service.exchange_code",
         new=AsyncMock(side_effect=ValueError("Invalid or expired OAuth state")),
     ):
         async with AsyncClient(

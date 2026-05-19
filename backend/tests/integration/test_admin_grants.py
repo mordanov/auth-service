@@ -25,7 +25,7 @@ async def test_non_admin_gets_403():
 
     # Token with no admin grant
     with patch(
-        "backend.src.services.token_service.decode_access_token",
+        "src.services.token_service.decode_access_token",
         return_value={"sub": "user-123", "grants": ["budget-site"], "exp": 9999999999},
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

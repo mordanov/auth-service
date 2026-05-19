@@ -14,7 +14,7 @@ async def test_admin_audit_requires_admin_role():
     from src.main import app
 
     with patch(
-        "backend.src.services.token_service.decode_access_token",
+        "src.services.token_service.decode_access_token",
         return_value={"sub": "user-xyz", "grants": [], "exp": 9999999999},
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

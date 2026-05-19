@@ -25,12 +25,12 @@ def anyio_backend():
 @pytest.mark.anyio
 async def test_local_login_success(app):
     """Successful login returns a valid JWT and sets refresh cookie."""
-    from jose import jwt as _jwt
+    from authlib.jose import JsonWebKey, jwt as authlib_jwt
     from src.config import settings
 
     # First register a test user
     from src.db.base import AsyncSessionLocal
-    from src.services.auth_service import register_local, ensure_admin_grant
+    from src.services.auth_service import register_local
 
     async with AsyncSessionLocal() as session:
         await register_local(
@@ -53,11 +53,10 @@ async def test_local_login_success(app):
     assert data["token_type"] == "Bearer"
 
     # Decode and verify JWT structure
-    payload = _jwt.decode(
-        data["access_token"],
-        settings.jwt_public_key,
-        algorithms=["RS256"],
-    )
+    public_key = JsonWebKey.import_key(settings.jwt_public_key.encode(), {"kty": "RSA"})
+    claims = authlib_jwt.decode(data["access_token"], public_key)
+    claims.validate()
+    payload = dict(claims)
     assert "sub" in payload
     assert "grants" in payload
     assert isinstance(payload["grants"], list)
@@ -75,7 +74,7 @@ async def test_local_login_wrong_password(app):
             json={"email": "testuser@example.com", "password": "wrongpassword"},
         )
     assert resp.status_code == 401
-    assert resp.json()["error"] == "invalid_credentials"
+    assert resp.json()["detail"]["error"] == "invalid_credentials"
 
 
 @pytest.mark.anyio
