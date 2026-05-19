@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import pytest
-import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
 # These tests require a running database + redis.
@@ -17,12 +16,6 @@ def app():
     return _app
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
-@pytest.mark.anyio
 async def test_local_login_success(app):
     """Successful login returns a valid JWT and sets refresh cookie."""
     from authlib.jose import JsonWebKey, jwt as authlib_jwt
@@ -65,7 +58,6 @@ async def test_local_login_success(app):
     assert "refresh" in resp.cookies
 
 
-@pytest.mark.anyio
 async def test_local_login_wrong_password(app):
     """Login with wrong password returns 401."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -77,7 +69,6 @@ async def test_local_login_wrong_password(app):
     assert resp.json()["detail"]["error"] == "invalid_credentials"
 
 
-@pytest.mark.anyio
 async def test_token_refresh_and_rotation(app):
     """Refresh endpoint rotates the refresh token."""
     from src.db.base import AsyncSessionLocal

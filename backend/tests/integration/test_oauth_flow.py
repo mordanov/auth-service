@@ -9,12 +9,6 @@ import pytest
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
-@pytest.mark.anyio
 async def test_oauth_login_redirect():
     """GET /auth/login/google redirects to provider URL."""
     from httpx import AsyncClient, ASGITransport
@@ -33,7 +27,6 @@ async def test_oauth_login_redirect():
     assert "accounts.google.com" in resp.headers["location"]
 
 
-@pytest.mark.anyio
 async def test_oauth_callback_creates_user():
     """OAuth callback upserts user and issues tokens."""
     from httpx import AsyncClient, ASGITransport
@@ -64,7 +57,6 @@ async def test_oauth_callback_creates_user():
     assert "refresh" in resp.cookies
 
 
-@pytest.mark.anyio
 async def test_oauth_invalid_state():
     """OAuth callback with invalid state returns 401."""
     from httpx import AsyncClient, ASGITransport
