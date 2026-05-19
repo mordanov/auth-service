@@ -1,0 +1,237 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
+
+jobs:
+  test-backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: auth_test
+          POSTGRES_USER: auth_user
+          POSTGRES_PASSWORD: auth_pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U auth_user -d auth_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install dependencies
+        run: pip install --no-cache-dir ".[dev]"
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://auth_user:auth_pass@localhost:5432/auth_test
+          REDIS_URL: redis://localhost:6379/0
+        run: |
+          openssl genrsa -out /tmp/test_private.pem 2048
+          openssl rsa -in /tmp/test_private.pem -pubout -out /tmp/test_public.pem
+          export JWT_PRIVATE_KEY="$(cat /tmp/test_private.pem)"
+          export JWT_PUBLIC_KEY="$(cat /tmp/test_public.pem)"
+          alembic upgrade head
+          pytest -q --tb=short -m integration
+
+  test-frontend:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend]
+
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Deploy
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT || 22 }}
+          VPS_AUTH_DIR: ${{ secrets.VPS_AUTH_DIR }}
+          VPS_WEB_FOLDERS_DIR: ${{ secrets.VPS_WEB_FOLDERS_DIR }}
+          REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            "bash -se -- '$REPO' '$REF_NAME' '$VPS_AUTH_DIR' '$VPS_WEB_FOLDERS_DIR'" << 'EOF'
+
+          set -e
+
+          REPO="$1"
+          REF_NAME="$2"
+          AUTH_DIR="${3:-$HOME/auth-service}"
+          WEB_FOLDERS_DIR="${4:-$HOME/web-folders}"
+
+          PREVIOUS_COMMIT=""
+
+          # --- Update auth-service repo ---
+          mkdir -p "$AUTH_DIR"
+          cd "$AUTH_DIR"
+
+          if [ ! -d .git ]; then
+            git clone "https://github.com/$REPO.git" .
+          fi
+
+          PREVIOUS_COMMIT=$(git rev-parse HEAD || echo "")
+
+          git fetch origin --prune
+          git checkout "$REF_NAME"
+          git reset --hard "origin/$REF_NAME"
+
+          # --- Update web-folders infra repo ---
+          if [ ! -d "$WEB_FOLDERS_DIR/.git" ]; then
+            echo "web-folders repo is missing at $WEB_FOLDERS_DIR"
+            echo "Clone web-folders on VPS once, then rerun deployment"
+            exit 1
+          fi
+
+          cd "$WEB_FOLDERS_DIR"
+          git fetch origin --prune
+
+          if git show-ref --verify --quiet refs/remotes/origin/main; then
+            git checkout main
+            git reset --hard origin/main
+          else
+            git pull --ff-only
+          fi
+
+          # --- Rebuild shared stack from web-folders ---
+          cd "$WEB_FOLDERS_DIR"
+
+          if ! docker compose config --services | grep -qx "auth-backend"; then
+            echo "web-folders config is outdated: auth-backend service not found"
+            echo "Update web-folders on VPS to include auth services and retry deployment"
+            exit 1
+          fi
+
+          AUTH_HTTP_HOST="${AUTH_PRIMARY_DOMAIN:-auth.mainpage.ru}"
+
+          debug_dump() {
+            docker compose ps || true
+            docker compose logs --no-color --tail=200 auth-backend || true
+            docker compose logs --no-color --tail=200 auth-frontend || true
+            docker compose logs --no-color --tail=200 nginx || true
+          }
+
+          wait_for_health() {
+            local retries=60
+            local delay=2
+
+            echo "Waiting for auth service via nginx (Host: ${AUTH_HTTP_HOST})..."
+            for ((i=1; i<=retries; i++)); do
+              if curl -fsS -H "Host: ${AUTH_HTTP_HOST}" http://localhost/health > /dev/null 2>&1; then
+                echo "Health check passed"
+                return 0
+              fi
+              sleep "$delay"
+            done
+
+            echo "Health check failed after $((retries * delay))s"
+            return 1
+          }
+
+          echo "Building containers..."
+          docker compose build auth-backend auth-frontend nginx
+          docker compose up -d --remove-orphans
+
+          if ! wait_for_health; then
+            echo "Health check failed -> rollback"
+            debug_dump
+
+            if [ -n "$PREVIOUS_COMMIT" ]; then
+              cd "$AUTH_DIR"
+              git reset --hard "$PREVIOUS_COMMIT"
+              cd "$WEB_FOLDERS_DIR"
+              docker compose build auth-backend auth-frontend nginx
+              docker compose up -d --remove-orphans
+
+              if wait_for_health; then
+                echo "Rollback recovered service successfully"
+              else
+                echo "Rollback completed, but service is still unhealthy"
+                debug_dump
+              fi
+            fi
+
+            exit 1
+          fi
+
+          docker compose ps
+          EOF
+
+      - name: Deploy notification
+        if: success()
+        run: echo "✅ Deployment to ${{ secrets.VPS_HOST }} completed successfully!"
+
+      - name: Deploy failed notification
+        if: failure()
+        run: echo "❌ Deployment failed!"
