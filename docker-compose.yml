@@ -38,6 +38,11 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-authuser}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-authdb}
       REDIS_URL: redis://redis:6379/0
+      JWT_PRIVATE_KEY: ${AUTH_JWT_PRIVATE_KEY}
+      JWT_PUBLIC_KEY: ${AUTH_JWT_PUBLIC_KEY}
+      JWT_KEY_ID: ${AUTH_JWT_KEY_ID:-auth-key-1}
+      ACCESS_TOKEN_TTL_MINUTES: ${AUTH_ACCESS_TOKEN_TTL_MINUTES:-15}
+      REFRESH_TOKEN_TTL_DAYS: ${AUTH_REFRESH_TOKEN_TTL_DAYS:-30}
     ports:
       - "8000:8000"
     depends_on:
