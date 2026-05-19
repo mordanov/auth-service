@@ -40,6 +40,14 @@ def create_app() -> FastAPI:
     async def on_startup() -> None:
         await _seed_admin()
 
+    @app.on_event("shutdown")
+    async def on_shutdown() -> None:
+        from src.db.base import engine
+        from src.middleware.rate_limit import close_redis
+
+        await close_redis()
+        await engine.dispose()
+
     return app
 
 

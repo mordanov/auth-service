@@ -72,7 +72,7 @@ async def get_authorization_url(provider: str, redirect_after: str | None = None
     r = _get_redis()
     payload = json.dumps({"code_verifier": code_verifier, "redirect_after": redirect_after or ""})
     await r.setex(f"{_STATE_PREFIX}{state}", _STATE_TTL, payload)
-    await r.aclose()
+    await r.aclose(close_connection_pool=True)
 
     params = {
         "client_id": _PROVIDER_CLIENT_IDS[provider],
@@ -99,10 +99,10 @@ async def exchange_code(provider: str, code: str, state: str) -> dict:
     r = _get_redis()
     raw = await r.get(f"{_STATE_PREFIX}{state}")
     if not raw:
-        await r.aclose()
+        await r.aclose(close_connection_pool=True)
         raise ValueError("Invalid or expired OAuth state")
     await r.delete(f"{_STATE_PREFIX}{state}")
-    await r.aclose()
+    await r.aclose(close_connection_pool=True)
 
     state_data = json.loads(raw)
     code_verifier: str = state_data["code_verifier"]

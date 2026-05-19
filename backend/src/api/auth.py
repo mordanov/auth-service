@@ -8,7 +8,7 @@ import hashlib
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, status
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -235,11 +235,11 @@ async def refresh(
 # ── Logout ────────────────────────────────────────────────────────────────────
 
 
-@router.post("/logout", status_code=204)
+@router.post("/logout", status_code=204, response_class=Response)
 async def logout(
     refresh: str | None = Cookie(default=None),
     session: AsyncSession = Depends(get_db),
-):
+) -> Response:
     """Revoke the current refresh token."""
     if refresh:
         token_hash = hash_refresh_token(refresh)
@@ -252,7 +252,6 @@ async def logout(
         )
         await session.commit()
 
-    from fastapi.responses import Response
     resp = Response(status_code=204)
     resp.delete_cookie("refresh", path="/auth/refresh")
     return resp

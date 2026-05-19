@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -85,14 +85,15 @@ async def get_user(
     return detail
 
 
-@router.post("/users/{user_id}/revoke-sessions", status_code=204)
+@router.post("/users/{user_id}/revoke-sessions", status_code=204, response_class=Response)
 async def revoke_user_sessions(
     user_id: uuid.UUID,
     authorization: str | None = Header(default=None),
     session: AsyncSession = Depends(get_db),
-) -> None:
+) -> Response:
     actor_id = uuid.UUID(_get_admin_user_id(authorization or ""))
     await grant_service.revoke_all_user_sessions(session, actor_id=actor_id, user_id=user_id)
+    return Response(status_code=204)
 
 
 # ── Grant endpoints ────────────────────────────────────────────────────────────

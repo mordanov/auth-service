@@ -189,7 +189,7 @@ async def revoke_all_user_sessions(
     pattern = f"rt:{user_id}:*"
     async for key in r.scan_iter(pattern):
         await r.delete(key)
-    await r.aclose()
+    await r.aclose(close_connection_pool=True)
 
     await _write_audit(session, actor_id, "token_revoked_all", user_id, None)
     await session.commit()

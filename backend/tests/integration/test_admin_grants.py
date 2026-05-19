@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import patch, MagicMock
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio(scope="session")]
 
 
 def _make_admin_token(user_id: str = "admin-user-id") -> str:

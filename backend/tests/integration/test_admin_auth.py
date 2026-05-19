@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import patch
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio(scope="session")]
 
 
 async def test_admin_audit_requires_admin_role():

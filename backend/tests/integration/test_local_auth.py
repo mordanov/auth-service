@@ -6,7 +6,7 @@ from httpx import AsyncClient, ASGITransport
 
 # These tests require a running database + redis.
 # Marked as integration — run with: pytest -m integration
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio(scope="session")]
 
 
 @pytest.fixture

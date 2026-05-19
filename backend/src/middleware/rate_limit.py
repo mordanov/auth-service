@@ -19,18 +19,27 @@ def get_redis() -> aioredis.Redis:
     return _redis_client
 
 
+async def close_redis() -> None:
+    """Close the shared Redis client if it was initialized."""
+    global _redis_client
+    if _redis_client is None:
+        return
+    await _redis_client.aclose(close_connection_pool=True)
+    _redis_client = None
+
+
 async def check_rate_limit(key: str, max_requests: int, window_seconds: int = 60) -> None:
     """Sliding window rate limit. Raises HTTP 429 if limit exceeded."""
     r = get_redis()
     now = time.time()
     window_start = now - window_seconds
 
-    pipe = r.pipeline()
-    pipe.zremrangebyscore(key, "-inf", window_start)
-    pipe.zadd(key, {str(now): now})
-    pipe.zcard(key)
-    pipe.expire(key, window_seconds)
-    results = await pipe.execute()
+    async with r.pipeline() as pipe:
+        pipe.zremrangebyscore(key, "-inf", window_start)
+        pipe.zadd(key, {str(now): now})
+        pipe.zcard(key)
+        pipe.expire(key, window_seconds)
+        results = await pipe.execute()
     count = results[2]
 
     if count > max_requests:

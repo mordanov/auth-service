@@ -157,7 +157,7 @@ async def issue_tokens(session: AsyncSession, user: User) -> tuple[str, str]:
         redis_key = f"rt:{user.id}:{rt.token_id}"
         ttl_seconds = settings.refresh_token_ttl_days * 86400
         await r.setex(redis_key, ttl_seconds, "1")
-        await r.aclose()
+        await r.aclose(close_connection_pool=True)
     except Exception:
         # Redis write is supplementary — token is authoritative in Postgres
         pass

@@ -59,6 +59,7 @@ def create_access_token(sub: str, grants: list[str]) -> str:
     payload: dict[str, Any] = {
         "sub": sub,
         "grants": grants,
+        "jti": secrets.token_hex(16),
         "iat": int(now.timestamp()),
         "exp": int(exp.timestamp()),
     }
